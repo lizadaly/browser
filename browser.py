@@ -16,7 +16,7 @@ def request(url: str) -> tuple((dict, str)):
         s = ctx.wrap_socket(s, server_hostname=o.hostname)
 
     s.send((f"GET {o.path or '/'} HTTP/1.1\r\n"
-            "Connection: close"
+            "Connection: close\r\n"
             f"Host: {o.hostname}\r\n\r\n".encode('utf8')))
     response = s.makefile("r", encoding="utf8", newline="\r\n")
     statusline = response.readline()
