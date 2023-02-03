@@ -1,5 +1,6 @@
 import logging
 import socket
+import tkinter
 from urllib.parse import urlparse
 from html.parser import HTMLParser
 import ssl
@@ -35,23 +36,57 @@ def request(url: str) -> tuple((dict, str)):
 
     return headers, body
 
+class Browser:
+    def __init__(self, width=800, height=600):
+        self.width = width
+        self.height = height
+        self.window = tkinter.Tk()
+        self.canvas = tkinter.Canvas(self.window, width=self.width, height=self.height)
+        self.canvas.pack()
 
-def show(body: str) -> str:
+    def load(self, url: str):
+        HSTEP, VSTEP = 13, 18
+        cursor_x, cursor_y = HSTEP, VSTEP
 
+        headers, body = request(url)
+        text = lex(body)
+        for c in text:
+            self.canvas.create_text(cursor_x, cursor_y, text=c)
+            cursor_x += HSTEP
+            if cursor_x >= self.width - HSTEP:
+                cursor_y += VSTEP
+                cursor_x = HSTEP
+
+def lex(body: str) -> str:
     class BrowserParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.text: list(str) = []
+            self.capture = False
+
+        def handle_starttag(self, tag: str, attrs: any):
+            if tag == "body":
+                self.capture = True
+
+        def handle_endtag(self, tag: str) -> None:
+            if tag == "body":
+                self.capture = False
+
         def handle_data(self, data: str) -> None:
-            print(data)
+            if self.capture:
+                self.text.append(data)
+
     parser = BrowserParser()
     parser.feed(body)
+    return "".join(parser.text )
 
-def load(url: str):
-    headers, body = request(url)
-    show(body)
+
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('url')
     args = parser.parse_args()
-    load(args.url)
+    Browser().load(args.url)
+    tkinter.mainloop()
 
