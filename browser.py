@@ -53,6 +53,8 @@ def layout(text: str) -> list:
             cursor_y += VSTEP
             cursor_x = HSTEP
     return display_list
+
+print(tkinter.font.families())
 class Browser:
 
     SCROLL_STEP = 100
@@ -67,6 +69,7 @@ class Browser:
         self.canvas.pack()
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
+
 
     def scrolldown(self, e):
         self.scroll += self.SCROLL_STEP
