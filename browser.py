@@ -100,29 +100,29 @@ class Tag:
         self.tag = tag
         self.mode = mode
 
+
 FONTS: dict[tuple, tkinter.font.Font] = {}
 
-def get_font(size: int, weight: Literal["normal", "bold"], style: Literal["roman", "italic"]) -> tkinter.font.Font:
+
+def get_font(
+    size: int, weight: Literal["normal", "bold"], style: Literal["roman", "italic"]
+) -> tkinter.font.Font:
     key = (size, weight, style)
     if key not in FONTS:
         font = get_font(size=size, weight=weight, style=style)
-        FONTS[key] = font 
+        FONTS[key] = font
     return FONTS[key]
 
-class Layout:
 
-    sizes = {
-        "h1": 24,
-        "h2": 20,
-        "h3": 18,
-        "h4": 16
-    }
+class Layout:
+    sizes = {"h1": 24, "h2": 20, "h3": 18, "h4": 16}
+
     def __init__(self, tokens: list[Tag | Text]):
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
         self.cursor_x: float = HSTEP
-        self.cursor_y:float  = VSTEP
-        self.weight :Literal["normal", "bold"] = "normal"
-        self.style : Literal["roman", "italic"] = "roman"
+        self.cursor_y: float = VSTEP
+        self.weight: Literal["normal", "bold"] = "normal"
+        self.style: Literal["roman", "italic"] = "roman"
         self.size = 16
         self.family = "Georgia"
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
@@ -148,7 +148,7 @@ class Layout:
                 if tok.mode == "start":
                     self.size = self.sizes[tok.tag]
                     self.weight = "bold"
-                else: 
+                else:
                     self.size = 16
                     self.weight = "normal"
             elif tok.tag == "br":
@@ -159,12 +159,13 @@ class Layout:
                 self.flush()
                 self.cursor_y += VSTEP
 
-
         elif isinstance(tok, Text):
             self.text(tok)
 
     def text(self, tok: Text):
-        font = tkinter.font.Font(size=self.size, family=self.family, weight=self.weight, slant=self.style)
+        font = tkinter.font.Font(
+            size=self.size, family=self.family, weight=self.weight, slant=self.style
+        )
         for word in tok.text.split():
             self.line.append((self.cursor_x, word, font))
             w = font.measure(word)
@@ -172,10 +173,9 @@ class Layout:
             if self.cursor_x + w > WIDTH - HSTEP:
                 self.flush()
 
-
     def flush(self) -> None:
-        if not self.line: 
-            return 
+        if not self.line:
+            return
         metrics = [font.metrics() for x, word, font in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
@@ -211,6 +211,7 @@ def lex(body: str) -> list[Tag | Text]:
                 self.tokens.append(Tag(tag, mode="end"))
             if tag in ("script", "style", "svg"):
                 self.capture = True
+
         def handle_data(self, data: str) -> None:
             if self.capture:
                 self.tokens.append(Text(data))
