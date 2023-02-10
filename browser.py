@@ -111,6 +111,12 @@ def get_font(size: int, weight: Literal["normal", "bold"], style: Literal["roman
 
 class Layout:
 
+    sizes = {
+        "h1": 24,
+        "h2": 20,
+        "h3": 18,
+        "h4": 16
+    }
     def __init__(self, tokens: list[Tag | Text]):
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
         self.cursor_x: float = HSTEP
@@ -140,14 +146,15 @@ class Layout:
                     self.style = "roman"
             elif tok.tag in ("h1", "h2", "h3", "h4"):
                 if tok.mode == "start":
-                    self.size = 24
+                    self.size = self.sizes[tok.tag]
                     self.weight = "bold"
                 else: 
                     self.size = 16
                     self.weight = "normal"
             elif tok.tag == "br":
                 self.flush()
-
+            elif tok.tag in ("div", "p", "nav") and tok.mode == "start":
+                self.flush()
             elif tok.tag in ("div", "p", "nav") and tok.mode == "end":
                 self.flush()
                 self.cursor_y += VSTEP
@@ -193,7 +200,7 @@ def lex(body: str) -> list[Tag | Text]:
             if tag == "body":
                 self.capture = True
             if self.capture:
-                if tag in ("script", "style"):
+                if tag in ("script", "style", "svg"):
                     self.capture = False
                 self.tokens.append(Tag(tag, mode="start"))
 
@@ -202,9 +209,8 @@ def lex(body: str) -> list[Tag | Text]:
                 self.capture = False
             if self.capture:
                 self.tokens.append(Tag(tag, mode="end"))
-            if tag in ("script", "style"):
+            if tag in ("script", "style", "svg"):
                 self.capture = True
-
         def handle_data(self, data: str) -> None:
             if self.capture:
                 self.tokens.append(Text(data))
