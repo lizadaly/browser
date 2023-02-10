@@ -1,6 +1,7 @@
 import logging
 import socket
 import tkinter
+import tkinter.font
 from typing import Any
 from urllib.parse import urlparse
 from html.parser import HTMLParser
@@ -41,20 +42,20 @@ WIDTH = 800
 HEIGHT = 600
 HSTEP, VSTEP = 13, 18
 
-def layout(text: str) -> list:
-
-    cursor_x, cursor_y = HSTEP, VSTEP
-
+def layout(text: str, font=tkinter.font.Font) -> list:
     display_list: list[tuple[int, int, str]] = []
-    for c in text:
-        display_list.append((cursor_x, cursor_y, c))
-        cursor_x += HSTEP    
-        if cursor_x >= WIDTH - HSTEP:
-            cursor_y += VSTEP
+    cursor_x = HSTEP
+    cursor_y = VSTEP
+    for word in text.split():
+        w = font.measure(word)
+        if cursor_x + w > WIDTH - HSTEP:
+            cursor_y += font.metrics("linespace") * 1.25
             cursor_x = HSTEP
+        display_list.append((cursor_x, cursor_y, word))
+        cursor_x += w + font.measure(" ")
     return display_list
 
-print(tkinter.font.families())
+
 class Browser:
 
     SCROLL_STEP = 100
@@ -69,6 +70,9 @@ class Browser:
         self.canvas.pack()
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
+        self.font_normal_roman = tkinter.font.Font(family="Georgia", size="16", weight="normal", slant="roman")
+        self.font_bold_roman = tkinter.font.Font(family="Georgia", size="16", weight="bold", slant="roman")
+        self.font_normal_italic = tkinter.font.Font(family="Georgia", size="16", weight="normal", slant="italic")
 
 
     def scrolldown(self, e):
@@ -85,7 +89,7 @@ class Browser:
 
         headers, body = request(url)
         text = lex(body)
-        self.display_list = layout(text)
+        self.display_list = layout(text, self.font_normal_roman)
         self.draw()
 
     def draw(self):
@@ -93,7 +97,7 @@ class Browser:
         for x, y, c in self.display_list:
             if y > self.scroll + HEIGHT: continue
             if y + VSTEP < self.scroll: continue
-            self.canvas.create_text(x, y - self.scroll, text=c)
+            self.canvas.create_text(x, y - self.scroll, text=c, font=self.font_normal_roman, anchor="nw")
 
 
 def lex(body: str) -> str:
