@@ -100,6 +100,14 @@ class Tag:
         self.tag = tag
         self.mode = mode
 
+FONTS: dict[tuple, tkinter.font.Font] = {}
+
+def get_font(size: int, weight: Literal["normal", "bold"], style: Literal["roman", "italic"]) -> tkinter.font.Font:
+    key = (size, weight, style)
+    if key not in FONTS:
+        font = get_font(size=size, weight=weight, style=style)
+        FONTS[key] = font 
+    return FONTS[key]
 
 class Layout:
 
