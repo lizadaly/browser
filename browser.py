@@ -1,11 +1,12 @@
 import logging
 import socket
 import tkinter
+from typing import Any
 from urllib.parse import urlparse
 from html.parser import HTMLParser
 import ssl
 
-def request(url: str) -> tuple((dict, str)):
+def request(url: str) -> tuple[(dict, str)]:
     o = urlparse(url)
     s = socket.socket(family=socket.AF_INET, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP)
     port = o.port
@@ -36,35 +37,60 @@ def request(url: str) -> tuple((dict, str)):
 
     return headers, body
 
+WIDTH = 800
+HEIGHT = 600
+
+def layout(text: str) -> list:
+    HSTEP, VSTEP = 13, 18
+    cursor_x, cursor_y = HSTEP, VSTEP
+
+    display_list: list[tuple[int, int, str]] = []
+    for c in text:
+        display_list.append((cursor_x, cursor_y, c))
+        cursor_x += HSTEP    
+        if cursor_x >= WIDTH - HSTEP:
+            cursor_y += VSTEP
+            cursor_x = HSTEP
+    return display_list
 class Browser:
-    def __init__(self, width=800, height=600):
+
+    SCROLL_STEP = 100
+
+    def __init__(self, width=WIDTH, height=HEIGHT) -> None:
+        self.display_list: list[tuple[int, int, str]] = []
+        self.scroll = 0
         self.width = width
         self.height = height
         self.window = tkinter.Tk()
         self.canvas = tkinter.Canvas(self.window, width=self.width, height=self.height)
         self.canvas.pack()
+        self.window.bind("<Down>", self.scrolldown)
+
+    def scrolldown(self, e):
+        self.scroll += self.SCROLL_STEP
+        self.draw()
 
     def load(self, url: str):
-        HSTEP, VSTEP = 13, 18
-        cursor_x, cursor_y = HSTEP, VSTEP
 
         headers, body = request(url)
         text = lex(body)
-        for c in text:
-            self.canvas.create_text(cursor_x, cursor_y, text=c)
-            cursor_x += HSTEP
-            if cursor_x >= self.width - HSTEP:
-                cursor_y += VSTEP
-                cursor_x = HSTEP
+        self.display_list = layout(text)
+        self.draw()
+
+    def draw(self):
+        self.canvas.delete("all")
+        for x, y, c in self.display_list:
+            self.canvas.create_text(x, y - self.scroll, text=c)
+
 
 def lex(body: str) -> str:
     class BrowserParser(HTMLParser):
-        def __init__(self):
+        def __init__(self) -> None:
             super().__init__()
-            self.text: list(str) = []
+            self.text: list[str] = []
             self.capture = False
 
-        def handle_starttag(self, tag: str, attrs: any):
+        def handle_starttag(self, tag: str, attrs: Any):
             if tag == "body":
                 self.capture = True
 
