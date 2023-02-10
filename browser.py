@@ -56,7 +56,7 @@ class Browser:
     SCROLL_STEP = 100
 
     def __init__(self, width=WIDTH, height=HEIGHT) -> None:
-        self.display_list: list[tuple[int, int, str]] = []
+        self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
         self.scroll = 0
         self.width = width
         self.height = height
@@ -77,7 +77,7 @@ class Browser:
     def load(self, url: str):
         headers, body = request(url)
         tokens = lex(body)
-        self.display_list = layout(tokens)
+        self.display_list = Layout(tokens).display_list
         self.draw()
 
     def draw(self):
@@ -101,37 +101,76 @@ class Tag:
         self.mode = mode
 
 
-def layout(tokens: list[Tag | Text]) -> list:
-    display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
-    cursor_x: float = HSTEP
-    cursor_y: float = VSTEP
+class Layout:
 
-    for tok in tokens:
-        weight: Literal["normal", "bold"] = "normal"
-        slant: Literal["roman", "italic"] = "roman"
+    def __init__(self, tokens: list[Tag | Text]):
+        self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
+        self.cursor_x: float = HSTEP
+        self.cursor_y:float  = VSTEP
+        self.weight :Literal["normal", "bold"] = "normal"
+        self.style : Literal["roman", "italic"] = "roman"
+        self.size = 16
+        self.family = "Georgia"
+        self.line: list[tuple[float, str, tkinter.font.Font]] = []
+
+        for tok in tokens:
+            self.token(tok)
+
+        self.flush()
+
+    def token(self, tok: Tag | Text):
         if isinstance(tok, Tag):
             if tok.tag in ("b", "strong"):
                 if tok.mode == "start":
-                    weight = "bold"
+                    self.weight = "bold"
                 else:
-                    weight = "normal"
-            if tok.tag in ("i", "em"):
+                    self.weight = "normal"
+            elif tok.tag in ("i", "em"):
                 if tok.mode == "start":
-                    slant = "italic"
+                    self.style = "italic"
                 else:
-                    slant = "roman"
+                    self.style = "roman"
+            elif tok.tag in ("h1", "h2", "h3", "h4"):
+                if tok.mode == "start":
+                    self.size = 24
+                    self.weight = "bold"
+                else: 
+                    self.size = 16
+                    self.weight = "normal"
+            elif tok.tag == "br":
+                self.flush()
 
-        font = tkinter.font.Font(family="Helvetica", size=16, weight=weight, slant=slant)
+            elif tok.tag in ("div", "p", "nav") and tok.mode == "end":
+                self.flush()
+                self.cursor_y += VSTEP
 
-        if isinstance(tok, Text):
-            for word in tok.text.split():
-                w = font.measure(word)
-                if cursor_x + w > WIDTH - HSTEP:
-                    cursor_y += font.metrics("linespace") * 1.25
-                    cursor_x = HSTEP
-                display_list.append((cursor_x, cursor_y, word, font))
-                cursor_x += w + font.measure(" ")
-    return display_list
+
+        elif isinstance(tok, Text):
+            self.text(tok)
+
+    def text(self, tok: Text):
+        font = tkinter.font.Font(size=self.size, family=self.family, weight=self.weight, slant=self.style)
+        for word in tok.text.split():
+            self.line.append((self.cursor_x, word, font))
+            w = font.measure(word)
+            self.cursor_x += w + font.measure(" ")
+            if self.cursor_x + w > WIDTH - HSTEP:
+                self.flush()
+
+
+    def flush(self) -> None:
+        if not self.line: 
+            return 
+        metrics = [font.metrics() for x, word, font in self.line]
+        max_ascent = max([metric["ascent"] for metric in metrics])
+        baseline = self.cursor_y + 1.25 * max_ascent
+        for x, word, font in self.line:
+            y = baseline - font.metrics("ascent")
+            self.display_list.append((x, y, word, font))
+        self.cursor_x = HSTEP
+        self.line = []
+        max_descent = max([metric["descent"] for metric in metrics])
+        self.cursor_y = baseline + 1.25 * max_descent
 
 
 def lex(body: str) -> list[Tag | Text]:
