@@ -39,9 +39,10 @@ def request(url: str) -> tuple[(dict, str)]:
 
 WIDTH = 800
 HEIGHT = 600
+HSTEP, VSTEP = 13, 18
 
 def layout(text: str) -> list:
-    HSTEP, VSTEP = 13, 18
+
     cursor_x, cursor_y = HSTEP, VSTEP
 
     display_list: list[tuple[int, int, str]] = []
@@ -65,10 +66,17 @@ class Browser:
         self.canvas = tkinter.Canvas(self.window, width=self.width, height=self.height)
         self.canvas.pack()
         self.window.bind("<Down>", self.scrolldown)
+        self.window.bind("<Up>", self.scrollup)
 
     def scrolldown(self, e):
         self.scroll += self.SCROLL_STEP
         self.draw()
+
+    def scrollup(self, e):
+        self.scroll -= self.SCROLL_STEP
+        self.draw()
+
+
 
     def load(self, url: str):
 
@@ -80,6 +88,8 @@ class Browser:
     def draw(self):
         self.canvas.delete("all")
         for x, y, c in self.display_list:
+            if y > self.scroll + HEIGHT: continue
+            if y + VSTEP < self.scroll: continue
             self.canvas.create_text(x, y - self.scroll, text=c)
 
 
