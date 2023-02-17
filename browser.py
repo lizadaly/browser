@@ -2,7 +2,7 @@ import logging
 import socket
 import tkinter
 import tkinter.font
-from typing import Any, Literal, Optional
+from typing import Any, Literal, Optional, Self
 from urllib.parse import urlparse
 from html.parser import HTMLParser
 import ssl
@@ -50,6 +50,47 @@ def request(url: str) -> tuple[(dict, str)]:
 WIDTH = 800
 HEIGHT = 600
 HSTEP, VSTEP = 13, 18
+FONTS: dict[tuple, tkinter.font.Font] = {}
+
+BLOCK_ELEMENTS = [
+    "html",
+    "body",
+    "article",
+    "section",
+    "nav",
+    "aside",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hgroup",
+    "header",
+    "footer",
+    "address",
+    "p",
+    "hr",
+    "pre",
+    "blockquote",
+    "ol",
+    "ul",
+    "menu",
+    "li",
+    "dl",
+    "dt",
+    "dd",
+    "figure",
+    "figcaption",
+    "main",
+    "div",
+    "table",
+    "form",
+    "fieldset",
+    "legend",
+    "details",
+    "summary",
+]
 
 
 class Browser:
@@ -117,7 +158,19 @@ class Element(Node):
         return f"<{self.tag}>"
 
 
-FONTS: dict[tuple, tkinter.font.Font] = {}
+def layout_mode(node: Node) -> Literal["block", "inline"]:
+    if isinstance(node, Text):
+        return "inline"
+    elif node.children:
+        if any(
+            [
+                isinstance(child, Element) and child.tag in BLOCK_ELEMENTS
+                for child in node.children
+            ]
+        ):
+            return "block"
+        return "inline"
+    return "block"
 
 
 def get_font(
@@ -135,11 +188,18 @@ class DocumentLayout:
         self.node = node
         self.children: list[Node] = []
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
+        self.width: float = 0
+        self.x: float = 0
+        self.y: float = 0
 
     def layout(self):
         child = BlockLayout(self.node, self, None)
         self.children.append(child)
+        self.width = WIDTH - 2 * HSTEP
+        self.x = HSTEP
+        self.y = VSTEP
         child.layout()
+        self.height = child.height + 2 * VSTEP
         self.display_list = child.display_list
 
 
@@ -149,33 +209,55 @@ class BlockLayout:
     def __init__(
         self,
         node: Node,
-        parent: Element | "BlockLayout",
-        previous: Node | None | "BlockLayout",
-    ):
+        parent: Self,
+        previous: None | Self,
+    ): 
+        self.node = node
+        self.parent: BlockLayout = parent
+        self.previous: BlockLayout | None = previous
+        self.children: list[BlockLayout] = []
+
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
-        self.cursor_x: float = HSTEP
-        self.cursor_y: float = VSTEP
+        self.cursor_x: float = 0
+        self.cursor_y: float = 0
+        self.x: float = 0
+        self.y: float = 0
+        self.width: float = 0
+        self.height: float = 0
         self.weight: Literal["normal", "bold"] = "normal"
         self.style: Literal["roman", "italic"] = "roman"
         self.size = 16
         self.family = "Georgia"
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
 
-        self.node = node
-        self.parent: Element | "BlockLayout" = parent
-        self.previous: Node | "BlockLayout" | None = previous
-        self.children: list[Node] = []
+
 
     def layout(self) -> None:
-        self.recurse(self.node)
-        self.flush()
+        self.x = self.parent.x
+        self.y = self.previous.y + self.previous.height if self.previous else self.parent.y
+        self.width = self.parent.width 
 
-    def layout_intermediate(self) -> None:
-        previous: BlockLayout
-        for child in self.node.children:
-            next = BlockLayout(child, self, previous)
-            self.children.append(next)
-            previous = next
+        mode = layout_mode(self.node)
+        if mode == "block":
+            previous: BlockLayout | None = None
+            for child in self.node.children:
+                next = BlockLayout(child, self, previous)
+                self.children.append(next)
+                previous = next
+
+            for bl in self.children:
+                bl.layout()
+
+            self.height = sum([child.height for child in self.children])
+            for bl in self.children:
+                self.display_list.extend(bl.display_list)
+
+        else:
+            self.recurse(self.node)
+            self.flush()
+            self.height = self.cursor_y
+
+
 
     def recurse(self, tree: Node):
         if isinstance(tree, Text):
@@ -220,7 +302,7 @@ class BlockLayout:
             self.line.append((self.cursor_x, word, font))
             w = font.measure(word)
             self.cursor_x += w + font.measure(" ")
-            if self.cursor_x + w > WIDTH - HSTEP:
+            if self.cursor_x + w > self.width:
                 self.flush()
 
     def flush(self) -> None:
@@ -229,10 +311,11 @@ class BlockLayout:
         metrics = [font.metrics() for x, word, font in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
-        for x, word, font in self.line:
-            y = baseline - font.metrics("ascent")
+        for rel_x, word, font in self.line:
+            x = rel_x + self.x
+            y = self.y + baseline - font.metrics("ascent")
             self.display_list.append((x, y, word, font))
-        self.cursor_x = HSTEP
+        self.cursor_x = 0
         self.line = []
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
@@ -256,7 +339,7 @@ def lex(body: str) -> Element:
             if self.open:
                 el.parent = self.open[-1]
                 el.parent.children.append(el)
-            print(f"Opening {el}")
+            # print(f"Opening {el}")
             self.open.append(el)
 
         def handle_endtag(self, tag: str) -> None:
