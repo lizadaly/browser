@@ -2,7 +2,7 @@ import logging
 import socket
 import tkinter
 import tkinter.font
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 from urllib.parse import urlparse
 from html.parser import HTMLParser
 import ssl
@@ -76,8 +76,8 @@ class Browser:
 
     def load(self, url: str):
         headers, body = request(url)
-        tokens = lex(body)
-        self.display_list = Layout(tokens).display_list
+        root = lex(body)
+        self.display_list = Layout(root).display_list
         self.draw()
 
     def draw(self):
@@ -90,15 +90,29 @@ class Browser:
             self.canvas.create_text(x, y - self.scroll, text=c, anchor="nw", font=font)
 
 
-class Text:
-    def __init__(self, text: str):
+class Node:
+    def __init__(self, parent: Optional["Node"] | None):
+        self.parent: Node | None = parent
+        self.children: list[Node] = []
+
+
+class Text(Node):
+    def __init__(self, text: str, parent: Node):
+        super().__init__(parent)
         self.text = text
 
+    def __str__(self):
+        return f"[text] {self.text}"
 
-class Tag:
-    def __init__(self, tag: str, mode: str):
+
+class Element(Node):
+    def __init__(self, tag: str, attrs: list, parent: Node | None = None):
+        super().__init__(parent)
         self.tag = tag
-        self.mode = mode
+        self.attrs = attrs
+
+    def __str__(self):
+        return f"<{self.tag}>"
 
 
 FONTS: dict[tuple, tkinter.font.Font] = {}
@@ -117,7 +131,7 @@ def get_font(
 class Layout:
     sizes = {"h1": 24, "h2": 20, "h3": 18, "h4": 16}
 
-    def __init__(self, tokens: list[Tag | Text]):
+    def __init__(self, root: Element):
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
         self.cursor_x: float = HSTEP
         self.cursor_y: float = VSTEP
@@ -127,40 +141,44 @@ class Layout:
         self.family = "Georgia"
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
 
-        for tok in tokens:
-            self.token(tok)
+        self.recurse(root)
 
         self.flush()
 
-    def token(self, tok: Tag | Text):
-        if isinstance(tok, Tag):
-            if tok.tag in ("b", "strong"):
-                if tok.mode == "start":
-                    self.weight = "bold"
-                else:
-                    self.weight = "normal"
-            elif tok.tag in ("i", "em"):
-                if tok.mode == "start":
-                    self.style = "italic"
-                else:
-                    self.style = "roman"
-            elif tok.tag in ("h1", "h2", "h3", "h4"):
-                if tok.mode == "start":
-                    self.size = self.sizes[tok.tag]
-                    self.weight = "bold"
-                else:
-                    self.size = 16
-                    self.weight = "normal"
-            elif tok.tag == "br":
-                self.flush()
-            elif tok.tag in ("div", "p", "nav") and tok.mode == "start":
-                self.flush()
-            elif tok.tag in ("div", "p", "nav") and tok.mode == "end":
-                self.flush()
-                self.cursor_y += VSTEP
+    def recurse(self, tree: Node):
+        if isinstance(tree, Text):
+            self.text(tree)
 
-        elif isinstance(tok, Text):
-            self.text(tok)
+        elif isinstance(tree, Element):
+            self.open_tag(tree.tag)
+            for child in tree.children:
+                self.recurse(child)
+            self.close_tag(tree.tag)
+
+    def open_tag(self, tag: str):
+        if tag in ("b", "strong"):
+            self.weight = "bold"
+        elif tag in ("i", "em"):
+            self.style = "italic"
+        elif tag in ("h1", "h2", "h3", "h4"):
+            self.size = self.sizes[tag]
+            self.weight = "bold"
+        elif tag in ("div", "p", "nav"):
+            self.flush()
+
+    def close_tag(self, tag: str):
+        if tag in ("b", "strong"):
+            self.weight = "normal"
+        elif tag in ("i", "em"):
+            self.style = "roman"
+        elif tag in ("h1", "h2", "h3", "h4"):
+            self.size = 16
+            self.weight = "normal"
+        elif tag == "br":
+            self.flush()
+        elif tag in ("div", "p", "nav"):
+            self.flush()
+            self.cursor_y += VSTEP
 
     def text(self, tok: Text):
         font = tkinter.font.Font(
@@ -188,37 +206,41 @@ class Layout:
         self.cursor_y = baseline + 1.25 * max_descent
 
 
-def lex(body: str) -> list[Tag | Text]:
+def lex(body: str) -> Element:
     class BrowserParser(HTMLParser):
+        root: Element | None
+        open: list[Node]
+
         def __init__(self) -> None:
             super().__init__()
-            self.text: list[str] = []
-            self.tokens: list[Tag | Text] = []
-            self.capture = False
+            self.open = []
+            self.root = None
 
-        def handle_starttag(self, tag: str, attrs: Any):
-            if tag == "body":
-                self.capture = True
-            if self.capture:
-                if tag in ("script", "style", "svg"):
-                    self.capture = False
-                self.tokens.append(Tag(tag, mode="start"))
+        def handle_starttag(self, tag: str, attrs: list):
+            el = Element(tag, attrs)
+            if not self.root:
+                self.root = el
+
+            if self.open:
+                el.parent = self.open[-1]
+                el.parent.children.append(el)
+            print(f"Opening {el}")
+            self.open.append(el)
 
         def handle_endtag(self, tag: str) -> None:
-            if tag == "body":
-                self.capture = False
-            if self.capture:
-                self.tokens.append(Tag(tag, mode="end"))
-            if tag in ("script", "style", "svg"):
-                self.capture = True
+            self.open.pop()
 
         def handle_data(self, data: str) -> None:
-            if self.capture:
-                self.tokens.append(Text(data))
+            if self.root:
+                parent = self.open[-1]
+                text = Text(data, parent=parent)
+                parent.children.append(text)
 
     parser = BrowserParser()
     parser.feed(body)
-    return parser.tokens
+    if not parser.root:
+        raise Exception("Did not get a root node")
+    return parser.root
 
 
 if __name__ == "__main__":
