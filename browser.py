@@ -146,7 +146,12 @@ class DocumentLayout:
 class BlockLayout:
     sizes = {"h1": 24, "h2": 20, "h3": 18, "h4": 16}
 
-    def __init__(self, node: Element, parent: Element, previous: Node | None):
+    def __init__(
+        self,
+        node: Node,
+        parent: Element | "BlockLayout",
+        previous: Node | None | "BlockLayout",
+    ):
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
         self.cursor_x: float = HSTEP
         self.cursor_y: float = VSTEP
@@ -157,14 +162,20 @@ class BlockLayout:
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
 
         self.node = node
-        self.parent: Element = parent
-        self.previous: Node | None = previous
+        self.parent: Element | "BlockLayout" = parent
+        self.previous: Node | "BlockLayout" | None = previous
         self.children: list[Node] = []
 
     def layout(self) -> None:
         self.recurse(self.node)
-
         self.flush()
+
+    def layout_intermediate(self) -> None:
+        previous: BlockLayout
+        for child in self.node.children:
+            next = BlockLayout(child, self, previous)
+            self.children.append(next)
+            previous = next
 
     def recurse(self, tree: Node):
         if isinstance(tree, Text):
