@@ -76,8 +76,10 @@ class Browser:
 
     def load(self, url: str):
         headers, body = request(url)
-        root = lex(body)
-        self.display_list = Layout(root).display_list
+        self.nodes = lex(body)
+        self.document = DocumentLayout(self.nodes)
+        self.document.layout()
+        self.display_list = self.document.display_list
         self.draw()
 
     def draw(self):
@@ -128,10 +130,23 @@ def get_font(
     return FONTS[key]
 
 
-class Layout:
+class DocumentLayout:
+    def __init__(self, node: Element):
+        self.node = node
+        self.children: list[Node] = []
+        self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
+
+    def layout(self):
+        child = BlockLayout(self.node, self, None)
+        self.children.append(child)
+        child.layout()
+        self.display_list = child.display_list
+
+
+class BlockLayout:
     sizes = {"h1": 24, "h2": 20, "h3": 18, "h4": 16}
 
-    def __init__(self, root: Element):
+    def __init__(self, node: Element, parent: Element, previous: Node | None):
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
         self.cursor_x: float = HSTEP
         self.cursor_y: float = VSTEP
@@ -141,7 +156,13 @@ class Layout:
         self.family = "Georgia"
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
 
-        self.recurse(root)
+        self.node = node
+        self.parent: Element = parent
+        self.previous: Node | None = previous
+        self.children: list[Node] = []
+
+    def layout(self) -> None:
+        self.recurse(self.node)
 
         self.flush()
 
