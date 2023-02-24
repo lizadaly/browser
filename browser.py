@@ -120,7 +120,7 @@ class Browser:
         self.nodes = lex(body)
         self.document = DocumentLayout(self.nodes)
         self.document.layout()
-        self.display_list = self.document.display_list
+        self.document.paint(self.display_list)
         self.draw()
 
     def draw(self):
@@ -132,7 +132,7 @@ class Browser:
                 continue
             self.canvas.create_text(x, y - self.scroll, text=c, anchor="nw", font=font)
 
-
+ 
 class Node:
     def __init__(self, parent: Optional["Node"] | None):
         self.parent: Node | None = parent
@@ -186,7 +186,7 @@ def get_font(
 class DocumentLayout:
     def __init__(self, node: Element):
         self.node = node
-        self.children: list[Node] = []
+        self.children: list[BlockLayout] = []
         self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
         self.width: float = 0
         self.x: float = 0
@@ -202,6 +202,8 @@ class DocumentLayout:
         self.height = child.height + 2 * VSTEP
         self.display_list = child.display_list
 
+    def paint(self, display_list: list[tuple[float, float, str, tkinter.font.Font]]):
+        self.children[0].paint(display_list)
 
 class BlockLayout:
     sizes = {"h1": 24, "h2": 20, "h3": 18, "h4": 16}
@@ -230,6 +232,10 @@ class BlockLayout:
         self.family = "Georgia"
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
 
+    def paint(self, display_list: list[tuple[float, float, str, tkinter.font.Font]]):
+        for child in self.children:
+            child.paint(display_list)
+        display_list.extend(self.display_list)
 
 
     def layout(self) -> None:
