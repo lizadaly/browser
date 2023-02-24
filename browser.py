@@ -175,9 +175,6 @@ def style(node: Element):
 
 
 def layout_mode(node: Node) -> Literal["block", "inline"]:
-    # import pdb
-    # pdb.set_trace()
-
     if isinstance(node, Text):
         return "inline"
     elif node.children:
@@ -271,7 +268,7 @@ class BlockLayout:
         self.width = self.parent.width
 
         mode = layout_mode(self.node)
-        print(mode)
+
         if mode == "block":
             previous: BlockLayout | None = None
             for child in self.node.children:
@@ -451,6 +448,25 @@ def lex(body: str) -> Element:
     class BrowserParser(HTMLParser):
         root: Element | None
         open: list[Node]
+        VOID_ELEMENT_TAGS = frozenset(
+            [
+                "area",
+                "base",
+                "br",
+                "col",
+                "embed",
+                "hr",
+                "img",
+                "input",
+                "keygen",
+                "link",
+                "meta",
+                "param",
+                "source",
+                "track",
+                "wbr",
+            ]
+        )
 
         def __init__(self) -> None:
             super().__init__()
@@ -462,20 +478,23 @@ def lex(body: str) -> Element:
             style(el)
             if not self.root:
                 self.root = el
-            print(f"<{el.tag}>")
+            # print(f"<{el.tag}>")
+
             if self.open:
                 el.parent = self.open[-1]
-                print(f"{el.parent} -> {el.tag}")
+                # print(f"{el.parent} -> {el.tag}")
                 el.parent.children.append(el)
 
-            self.open.append(el)
+            if el.tag not in self.VOID_ELEMENT_TAGS:
+                self.open.append(el)
 
         def handle_endtag(self, tag: str) -> None:
-            print(f"</{tag}>")
-            self.open.pop()
+            # print(f"</{tag}>")
+            if tag not in self.VOID_ELEMENT_TAGS:
+                self.open.pop()
 
         def handle_data(self, data: str) -> None:
-            if self.root:
+            if self.root and self.open:
                 parent = self.open[-1]
                 text = Text(data, parent=parent)
                 parent.children.append(text)
