@@ -97,7 +97,7 @@ class Browser:
     SCROLL_STEP = 100
 
     def __init__(self, width=WIDTH, height=HEIGHT) -> None:
-        self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
+        self.display_list: list["DrawText | DrawRect"] = []
         self.scroll = 0
         self.width = width
         self.height = height
@@ -108,11 +108,12 @@ class Browser:
         self.window.bind("<Up>", self.scrollup)
 
     def scrolldown(self, e):
-        self.scroll += self.SCROLL_STEP
+        max_y = self.document.height - HEIGHT
+        self.scroll = min(self.scroll + self.SCROLL_STEP, max_y)
         self.draw()
 
     def scrollup(self, e):
-        self.scroll -= self.SCROLL_STEP
+        self.scroll = max(self.scroll - self.SCROLL_STEP, 0)
         self.draw()
 
     def load(self, url: str):
@@ -125,14 +126,14 @@ class Browser:
 
     def draw(self):
         self.canvas.delete("all")
-        for x, y, c, font in self.display_list:
-            if y > self.scroll + HEIGHT:
+        for cmd in self.display_list:
+            if cmd.top > self.scroll + HEIGHT:
                 continue
-            if y + VSTEP < self.scroll:
+            if cmd.bottom < self.scroll:
                 continue
-            self.canvas.create_text(x, y - self.scroll, text=c, anchor="nw", font=font)
+            cmd.execute(self.scroll, self.canvas)
 
- 
+
 class Node:
     def __init__(self, parent: Optional["Node"] | None):
         self.parent: Node | None = parent
@@ -187,7 +188,7 @@ class DocumentLayout:
     def __init__(self, node: Element):
         self.node = node
         self.children: list[BlockLayout] = []
-        self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
+        self.display_list: list["DrawText | DrawRect"] = []
         self.width: float = 0
         self.x: float = 0
         self.y: float = 0
@@ -200,10 +201,10 @@ class DocumentLayout:
         self.y = VSTEP
         child.layout()
         self.height = child.height + 2 * VSTEP
-        self.display_list = child.display_list
 
-    def paint(self, display_list: list[tuple[float, float, str, tkinter.font.Font]]):
+    def paint(self, display_list: list["DrawText | DrawRect"]):
         self.children[0].paint(display_list)
+
 
 class BlockLayout:
     sizes = {"h1": 24, "h2": 20, "h3": 18, "h4": 16}
@@ -211,15 +212,15 @@ class BlockLayout:
     def __init__(
         self,
         node: Node,
-        parent: Self,
+        parent: Self | DocumentLayout,
         previous: None | Self,
-    ): 
+    ):
         self.node = node
-        self.parent: BlockLayout = parent
+        self.parent: BlockLayout | DocumentLayout = parent
         self.previous: BlockLayout | None = previous
         self.children: list[BlockLayout] = []
 
-        self.display_list: list[tuple[float, float, str, tkinter.font.Font]] = []
+        self.display_list: list["DrawText | DrawRect"] = []
         self.cursor_x: float = 0
         self.cursor_y: float = 0
         self.x: float = 0
@@ -232,16 +233,23 @@ class BlockLayout:
         self.family = "Georgia"
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
 
-    def paint(self, display_list: list[tuple[float, float, str, tkinter.font.Font]]):
+    def paint(self, display_list: list["DrawText | DrawRect"]):
+        if isinstance(self.node, Element) and self.node.tag == "pre":
+            x2, y2 = self.x + self.width, self.y + self.height
+            rect = DrawRect(self.x, self.y, x2, y2, "gray")
+            display_list.append(rect)
+
         for child in self.children:
             child.paint(display_list)
-        display_list.extend(self.display_list)
 
+        display_list.extend(self.display_list)
 
     def layout(self) -> None:
         self.x = self.parent.x
-        self.y = self.previous.y + self.previous.height if self.previous else self.parent.y
-        self.width = self.parent.width 
+        self.y = (
+            self.previous.y + self.previous.height if self.previous else self.parent.y
+        )
+        self.width = self.parent.width
 
         mode = layout_mode(self.node)
         if mode == "block":
@@ -255,15 +263,11 @@ class BlockLayout:
                 bl.layout()
 
             self.height = sum([child.height for child in self.children])
-            for bl in self.children:
-                self.display_list.extend(bl.display_list)
 
         else:
             self.recurse(self.node)
             self.flush()
             self.height = self.cursor_y
-
-
 
     def recurse(self, tree: Node):
         if isinstance(tree, Text):
@@ -320,11 +324,48 @@ class BlockLayout:
         for rel_x, word, font in self.line:
             x = rel_x + self.x
             y = self.y + baseline - font.metrics("ascent")
-            self.display_list.append((x, y, word, font))
+            self.display_list.append(DrawText(x, y, word, font))
         self.cursor_x = 0
         self.line = []
         max_descent = max([metric["descent"] for metric in metrics])
         self.cursor_y = baseline + 1.25 * max_descent
+
+
+class DrawText:
+    def __init__(self, x1: float, y1: float, text: str, font: tkinter.font.Font):
+        self.top = y1
+        self.left = x1
+        self.text = text
+        self.font = font
+        self.bottom = y1 + font.metrics("linespace")
+
+    def execute(self, scroll: float, canvas: tkinter.Canvas):
+        canvas.create_text(
+            self.left,
+            self.top - scroll,
+            text=self.text,
+            font=self.font,
+            anchor="nw",
+        )
+
+
+class DrawRect:
+    def __init__(self, x1: float, y1: float, x2: float, y2: float, color: str):
+        self.top = y1
+        self.left = x1
+        self.bottom = y2
+        self.right = x2
+        self.color = color
+
+    def execute(self, scroll: float, canvas: tkinter.Canvas):
+        canvas.create_rectangle(
+            self.left,
+            self.top - scroll,
+            self.right,
+            self.bottom - scroll,
+            width=0,
+            fill=self.color,
+        )
 
 
 def lex(body: str) -> Element:
