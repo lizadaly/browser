@@ -138,6 +138,7 @@ class Node:
     def __init__(self, parent: Optional["Node"] | None):
         self.parent: Node | None = parent
         self.children: list[Node] = []
+        self.style: dict[str, str] = {}
 
 
 class Text(Node):
@@ -150,16 +151,33 @@ class Text(Node):
 
 
 class Element(Node):
-    def __init__(self, tag: str, attrs: list, parent: Node | None = None):
+    def __init__(
+        self, tag: str, attrs: list[tuple[str, None | str]], parent: Node | None = None
+    ):
         super().__init__(parent)
         self.tag = tag
-        self.attrs = attrs
+        self.attrs: dict[str, None | str] = {}
+        for n, v in attrs:
+            self.attrs[n] = v
 
     def __str__(self):
-        return f"<{self.tag}>"
+        return f"<{self.tag} {self.attrs}>"
+
+
+def style(node: Element):
+    if val := node.attrs.get("style"):
+        pairs = CSSParser(val).body()
+        for property, value in pairs.items():
+            node.style[property] = value
+    for child in node.children:
+        if isinstance(child, Element):
+            style(child)
 
 
 def layout_mode(node: Node) -> Literal["block", "inline"]:
+    # import pdb
+    # pdb.set_trace()
+
     if isinstance(node, Text):
         return "inline"
     elif node.children:
@@ -234,9 +252,10 @@ class BlockLayout:
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
 
     def paint(self, display_list: list["DrawText | DrawRect"]):
-        if isinstance(self.node, Element) and self.node.tag == "pre":
+        bgcolor = self.node.style.get("background-color", "transparent")
+        if bgcolor != "transparent":
             x2, y2 = self.x + self.width, self.y + self.height
-            rect = DrawRect(self.x, self.y, x2, y2, "gray")
+            rect = DrawRect(self.x, self.y, x2, y2, bgcolor)
             display_list.append(rect)
 
         for child in self.children:
@@ -252,6 +271,7 @@ class BlockLayout:
         self.width = self.parent.width
 
         mode = layout_mode(self.node)
+        print(mode)
         if mode == "block":
             previous: BlockLayout | None = None
             for child in self.node.children:
@@ -368,6 +388,65 @@ class DrawRect:
         )
 
 
+class CSSParser:
+    def __init__(self, s: str):
+        self.s: str = s
+        self.i: int = 0
+
+    def whitespace(self) -> None:
+        while self.i < len(self.s) and self.s[self.i].isspace():
+            self.i += 1
+
+    def word(self) -> str:
+        start = self.i
+        while self.i < len(self.s):
+            if self.s[self.i].isalnum() or self.s[self.i] in "#-.%":
+                self.i += 1
+            else:
+                break
+        assert self.i > start
+        return self.s[start : self.i]
+
+    def literal(self, literal: str):
+        assert self.i < len(self.s) and self.s[self.i] == literal
+        self.i += 1
+
+    def pair(self) -> tuple[str, str]:
+        prop = self.word()
+        self.whitespace()
+        self.literal(":")
+        self.whitespace()
+        val = self.word()
+        return prop.lower(), val
+
+    def ignore_until(self, chars: str) -> str | None:
+        while self.i < len(self.s):
+            if self.s[self.i] in chars:
+                return self.s[self.i]
+            else:
+                self.i += 1
+        return None
+
+    def body(self) -> dict[str, str]:
+        pairs: dict[str, str] = {}
+        while self.i < len(self.s):
+            try:
+                prop, val = self.pair()
+                pairs[prop.lower()] = val
+                self.whitespace()
+                self.literal(";")
+                self.whitespace()
+            except AssertionError as e:
+                print(e)
+                why = self.ignore_until(";")
+                if why == ";":
+                    self.literal(";")
+                    self.whitespace()
+                else:
+                    break
+        return pairs
+
+
 def lex(body: str) -> Element:
     class BrowserParser(HTMLParser):
         root: Element | None
@@ -378,18 +457,21 @@ def lex(body: str) -> Element:
             self.open = []
             self.root = None
 
-        def handle_starttag(self, tag: str, attrs: list):
+        def handle_starttag(self, tag: str, attrs: list[tuple[str, None | str]]):
             el = Element(tag, attrs)
+            style(el)
             if not self.root:
                 self.root = el
-
+            print(f"<{el.tag}>")
             if self.open:
                 el.parent = self.open[-1]
+                print(f"{el.parent} -> {el.tag}")
                 el.parent.children.append(el)
-            # print(f"Opening {el}")
+
             self.open.append(el)
 
         def handle_endtag(self, tag: str) -> None:
+            print(f"</{tag}>")
             self.open.pop()
 
         def handle_data(self, data: str) -> None:
