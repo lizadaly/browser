@@ -7,6 +7,12 @@ logging.basicConfig()
 logger = logging.getLogger(__name__)
 
 
+INHERITED_PROPERTIES = {
+    "font-size": "16px",
+    "font-style": "normal",
+    "font-weight": "normal",
+    "color": "black"
+}
 class Selector(ABC):
     priority: int
     @abstractmethod
@@ -136,19 +142,46 @@ class CSSParser:
                     break
         return rules
 
+def compute_style(node: Node, property: str, value: str):
+    if property == "font-size":
+        if value.endswith("px"):
+            return value
+        elif value.endswith("%"):
+            if node.parent:
+                parent_font_size = node.parent.style["font-size"]
+            else:
+                parent_font_size = INHERITED_PROPERTIES["font-size"]
+            node_pct = float(value[:-1]) / 100 
+            parent_px = float(parent_font_size[:-2])
+            return str(node_pct * parent_px) + "px"
+        return None 
+    return value 
 
 def style(node: Element, rules: list[SelectorRule]):
+
+    for property, default_value in INHERITED_PROPERTIES.items():
+        if node.parent:
+            node.style[property] = node.parent.style[property]
+        else:
+            node.style[property] = default_value
+
     for selector, body in rules:
         if not selector.matches(node):
             continue
 
         for property, value in body.items():
-            node.style[property] = value
+            computed_value = compute_style(node, property, value)
+            if not computed_value:
+                continue
+            node.style[property] = computed_value
 
     if val := node.attrs.get("style"):
         pairs = CSSParser(val).body()
         for property, value in pairs.items():
-            node.style[property] = value
+            computed_value = compute_style(node, property, value)
+            if not computed_value:
+                continue
+            node.style[property] = computed_value
     for child in node.children:
         if isinstance(child, Element):
             style(child, rules)

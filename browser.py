@@ -183,12 +183,14 @@ def layout_mode(node: Node) -> Literal["block", "inline"]:
 
 
 def get_font(
-    size: int, weight: Literal["normal", "bold"], style: Literal["roman", "italic"]
+    size: int, weight: str, style: str, family: str,
 ) -> tkinter.font.Font:
-    key = (size, weight, style)
+    key = (size, weight, style, family)
     if key not in FONTS:
-        font = get_font(size=size, weight=weight, style=style)
-        FONTS[key] = font
+       font = tkinter.font.Font(
+            size=size, family=family, weight=weight, slant=style  # type: ignore 
+       )
+       FONTS[key] = font
     return FONTS[key]
 
 
@@ -235,8 +237,8 @@ class BlockLayout:
         self.y: float = 0
         self.width: float = 0
         self.height: float = 0
-        self.weight: Literal["normal", "bold"] = "normal"
-        self.style: Literal["roman", "italic"] = "roman"
+        self.weight = "normal"
+        self.style = "roman"
         self.size = 16
         self.family = "Georgia"
         self.line: list[tuple[float, str, tkinter.font.Font]] = []
@@ -315,9 +317,17 @@ class BlockLayout:
             self.cursor_y += VSTEP
 
     def text(self, tok: Text):
-        font = tkinter.font.Font(
-            size=self.size, family=self.family, weight=self.weight, slant=self.style
-        )
+        weight = tok.parent.style["font-weight"]
+        style = tok.parent.style["font-style"]
+
+        # Normalize some junk for TK
+        if style == "normal": 
+            style = "roman"
+        if weight not in ["normal", "bold"]:
+            weight = "normal"
+        size = int(float(tok.parent.style["font-size"][:-2]) * .75)
+        font = get_font(size=size, weight=weight, style=style, family=self.family)
+
         for word in tok.text.split():
             self.line.append((self.cursor_x, word, font))
             w = font.measure(word)
