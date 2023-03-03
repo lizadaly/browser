@@ -11,7 +11,7 @@ class Node:
 
 class Text(Node):
     def __init__(self, text: str, parent: Node):
-        super().__init__() 
+        super().__init__()
         self.parent: Node = parent
         self.text = text
 

@@ -59,10 +59,18 @@ BLOCK_ELEMENTS = [
     "summary",
 ]
 
+
 def request(url: str) -> str:
-    req = urllib_request.Request(url, headers={'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'})
+    req = urllib_request.Request(
+        url,
+        headers={
+            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+        },
+    )
     with urllib_request.urlopen(req) as f:
-        return f.read().decode('utf-8')
+        return f.read().decode("utf-8")
+
+
 class Browser:
     SCROLL_STEP = 100
 
@@ -72,7 +80,9 @@ class Browser:
         self.width = width
         self.height = height
         self.window = tkinter.Tk()
-        self.canvas = tkinter.Canvas(self.window, width=self.width, height=self.height, bg="white")
+        self.canvas = tkinter.Canvas(
+            self.window, width=self.width, height=self.height, bg="white"
+        )
         self.canvas.pack()
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
@@ -142,14 +152,17 @@ def layout_mode(node: Node) -> Literal["block", "inline"]:
 
 
 def get_font(
-    size: int, weight: str, style: str, family: str,
+    size: int,
+    weight: str,
+    style: str,
+    family: str,
 ) -> tkinter.font.Font:
     key = (size, weight, style, family)
     if key not in FONTS:
-       font = tkinter.font.Font(
-            size=size, family=family, weight=weight, slant=style  # type: ignore 
-       )
-       FONTS[key] = font
+        font = tkinter.font.Font(
+            size=size, family=family, weight=weight, slant=style  # type: ignore
+        )
+        FONTS[key] = font
     return FONTS[key]
 
 
@@ -246,18 +259,17 @@ class BlockLayout:
             for child in tree.children:
                 self.recurse(child)
 
-
     def text(self, tok: Text):
         weight = tok.parent.style["font-weight"]
         style = tok.parent.style["font-style"]
         color = tok.parent.style["color"]
         family = tok.parent.style["font-family"].split(",")[0]
         # Normalize some junk for TK
-        if style == "normal": 
+        if style == "normal":
             style = "roman"
         if weight not in ["normal", "bold"]:
             weight = "normal"
-        size = int(float(tok.parent.style["font-size"][:-2]) * .75)
+        size = int(float(tok.parent.style["font-size"][:-2]) * 0.75)
         font = get_font(size=size, weight=weight, style=style, family=family)
 
         for word in tok.text.split():
@@ -284,7 +296,9 @@ class BlockLayout:
 
 
 class DrawText:
-    def __init__(self, x1: float, y1: float, text: str, font: tkinter.font.Font, color: str):
+    def __init__(
+        self, x1: float, y1: float, text: str, font: tkinter.font.Font, color: str
+    ):
         self.top = y1
         self.left = x1
         self.text = text
@@ -299,7 +313,7 @@ class DrawText:
             text=self.text,
             font=self.font,
             anchor="nw",
-            fill=self.color
+            fill=self.color,
         )
 
 

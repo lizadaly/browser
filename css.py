@@ -14,8 +14,11 @@ INHERITED_PROPERTIES = {
     "color": "black",
     "font-family": "Georgia",
 }
+
+
 class Selector(ABC):
     priority: int
+
     @abstractmethod
     def matches(self, node: Node) -> bool:
         pass
@@ -35,11 +38,12 @@ class TagSelector(Selector):
     def __str__(self):
         return f"sel: {self.tag}"
 
+
 class DescendentSelector(Selector):
     def __init__(self, ancestor: SelectorType, descendant: SelectorType):
         self.ancestor = ancestor
         self.descendant = descendant
-        self.priority = ancestor.priority + descendant.priority 
+        self.priority = ancestor.priority + descendant.priority
 
     def matches(self, node: Node) -> bool:
         if not self.descendant.matches(node):
@@ -56,9 +60,11 @@ class DescendentSelector(Selector):
 
 SelectorRule = tuple[TagSelector | DescendentSelector, dict[str, str]]
 
+
 def cascade_priority(rule: SelectorRule) -> int:
-    selector, _ = rule 
+    selector, _ = rule
     return selector.priority
+
 
 class CSSParser:
     def __init__(self, s: str):
@@ -148,6 +154,7 @@ class CSSParser:
                     break
         return rules
 
+
 def compute_style(node: Node, property: str, value: str):
     if property == "font-size":
         if value.endswith("px"):
@@ -157,14 +164,14 @@ def compute_style(node: Node, property: str, value: str):
                 parent_font_size = node.parent.style["font-size"]
             else:
                 parent_font_size = INHERITED_PROPERTIES["font-size"]
-            node_pct = float(value[:-1]) / 100 
+            node_pct = float(value[:-1]) / 100
             parent_px = float(parent_font_size[:-2])
             return str(node_pct * parent_px) + "px"
-        return None 
-    return value 
+        return None
+    return value
+
 
 def style(node: Element, rules: list[SelectorRule]):
-
     for property, default_value in INHERITED_PROPERTIES.items():
         if node.parent:
             node.style[property] = node.parent.style[property]
