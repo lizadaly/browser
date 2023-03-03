@@ -1,4 +1,5 @@
 import logging
+from pathlib import Path
 import socket
 import tkinter
 import tkinter.font
@@ -109,8 +110,7 @@ class Browser:
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
 
-        with open('browser.css') as f:
-            self.default_style_sheet = CSSParser(f.read()).parse()
+        self.default_style_sheet = CSSParser(Path("browser.css").read_text()).parse()
 
 
     def scrolldown(self, e):

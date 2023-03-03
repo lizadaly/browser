@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
+import logging
 from typing import Self, Type, TypeVar
 from htmlparser import Element, Node
 
+logging.basicConfig()
+logger = logging.getLogger(__name__)
 
 class Selector(ABC):
     @abstractmethod
@@ -84,7 +87,7 @@ class CSSParser:
                 self.literal(";")
                 self.whitespace()
             except AssertionError as e:
-                print(e)
+                logger.warning(e)
                 why = self.ignore_until(";}")
                 if why == ";":
                     self.literal(";")
@@ -97,7 +100,7 @@ class CSSParser:
     def selector(self):
         out = TagSelector(self.word().lower())
         self.whitespace()
-        while self.i < len(self.s) and self.s[self.i] != '{}':
+        while self.i < len(self.s) and self.s[self.i] != '{':
             tag = self.word()
             descendent = TagSelector(tag.lower())
             out = DescendentSelector(out, descendent)
