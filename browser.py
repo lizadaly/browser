@@ -4,7 +4,7 @@ import socket
 import tkinter
 import tkinter.font
 from typing import Any, Literal, Self
-from urllib import parse
+from urllib import parse, request as urllib_request
 from urllib.parse import urlparse
 import ssl
 
@@ -13,49 +13,6 @@ from htmlparser import Element, Node, Text, lex, tree_to_list
 
 
 logging.basicConfig()
-
-
-def request(url: str) -> tuple[(dict, str)]:
-    o = urlparse(url)
-    s = socket.socket(
-        family=socket.AF_INET, type=socket.SOCK_STREAM, proto=socket.IPPROTO_TCP
-    )
-    port = o.port
-    if not port:
-        port = 80 if o.scheme == "http" else 443
-    s.connect((o.hostname, port))
-    if o.scheme == "https":
-        ctx = ssl.create_default_context()
-        s = ctx.wrap_socket(s, server_hostname=o.hostname)
-
-    s.send(
-        (
-            f"GET {o.path or '/'} HTTP/1.1\r\n"
-            "Connection: close\r\n"
-            f"Host: {o.hostname}\r\n\r\n".encode("utf8")
-        )
-    )
-    response = s.makefile("r", encoding="utf8", newline="\r\n")
-    statusline = response.readline()
-    version, status, explanation = statusline.split(" ", 2)
-    headers = {}
-    while True:
-        line = response.readline()
-        if line == "\r\n":
-            break
-        header, value = line.split(":", 1)
-        headers[header.lower()] = value.strip()
-    if status.startswith("30"):
-        return request(headers["location"])
-    logging.info(headers)
-    assert status == "200", f"{status}: {explanation}"
-    assert "transfer-encoding" not in headers
-    assert "content-encoding" not in headers
-    body = response.read()
-    s.close()
-
-    return headers, body
-
 
 WIDTH = 800
 HEIGHT = 600
@@ -102,7 +59,10 @@ BLOCK_ELEMENTS = [
     "summary",
 ]
 
-
+def request(url: str) -> str:
+    req = urllib_request.Request(url, headers={'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'})
+    with urllib_request.urlopen(req) as f:
+        return f.read().decode('utf-8')
 class Browser:
     SCROLL_STEP = 100
 
@@ -129,7 +89,7 @@ class Browser:
         self.draw()
 
     def load(self, url: str):
-        _, body = request(url)
+        body = request(url)
 
         self.root = lex(body)
         rules = self.default_style_sheet.copy()
@@ -147,8 +107,7 @@ class Browser:
             if not parts.scheme:
                 link = parse.urljoin(url, parts.path)
             try:
-                _, body = request(link)    
-                rules.extend(CSSParser(body).parse())
+                rules.extend(CSSParser(request(url)).parse())
             except AssertionError as e:
                 logging.warning(e)
         style(self.root, sorted(rules, key=cascade_priority))
@@ -237,10 +196,7 @@ class BlockLayout:
         self.y: float = 0
         self.width: float = 0
         self.height: float = 0
-        self.weight = "normal"
-        self.style = "roman"
-        self.size = 16
-        self.family = "Georgia"
+
         self.line: list[tuple[float, str, tkinter.font.Font, str]] = []
 
     def paint(self, display_list: list["DrawText | DrawRect"]):
@@ -295,14 +251,14 @@ class BlockLayout:
         weight = tok.parent.style["font-weight"]
         style = tok.parent.style["font-style"]
         color = tok.parent.style["color"]
-
+        family = tok.parent.style["font-family"].split(",")[0]
         # Normalize some junk for TK
         if style == "normal": 
             style = "roman"
         if weight not in ["normal", "bold"]:
             weight = "normal"
         size = int(float(tok.parent.style["font-size"][:-2]) * .75)
-        font = get_font(size=size, weight=weight, style=style, family=self.family)
+        font = get_font(size=size, weight=weight, style=style, family=family)
 
         for word in tok.text.split():
             self.line.append((self.cursor_x, word, font, color))

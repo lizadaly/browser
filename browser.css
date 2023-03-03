@@ -1,5 +1,14 @@
+html {
+  background-color: white;
+  font-family: Georgia;
+}
+
 pre {
   background-color: lightgray;
+  font-family: Courier;
+}
+code {
+  font-family: Courier;
 }
 a {
   color: blue;

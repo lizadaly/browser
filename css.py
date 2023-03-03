@@ -11,7 +11,8 @@ INHERITED_PROPERTIES = {
     "font-size": "16px",
     "font-style": "normal",
     "font-weight": "normal",
-    "color": "black"
+    "color": "black",
+    "font-family": "Georgia",
 }
 class Selector(ABC):
     priority: int
@@ -31,6 +32,8 @@ class TagSelector(Selector):
     def matches(self, node: Node) -> bool:
         return isinstance(node, Element) and self.tag == node.tag
 
+    def __str__(self):
+        return f"sel: {self.tag}"
 
 class DescendentSelector(Selector):
     def __init__(self, ancestor: SelectorType, descendant: SelectorType):
@@ -47,6 +50,8 @@ class DescendentSelector(Selector):
             node = node.parent
         return False
 
+    def __str__(self):
+        return f"{self.ancestor} {self.descendant}"
 
 
 SelectorRule = tuple[TagSelector | DescendentSelector, dict[str, str]]
@@ -67,7 +72,7 @@ class CSSParser:
     def word(self) -> str:
         start = self.i
         while self.i < len(self.s):
-            if self.s[self.i].isalnum() or self.s[self.i] in "#-.%":
+            if self.s[self.i].isalnum() or self.s[self.i] in "'\"#-.%":
                 self.i += 1
             else:
                 break
@@ -99,6 +104,7 @@ class CSSParser:
         while self.i < len(self.s) and self.s[self.i] != "}":
             try:
                 prop, val = self.pair()
+                # print(prop, val)
                 pairs[prop.lower()] = val
                 self.whitespace()
                 self.literal(";")
