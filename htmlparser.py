@@ -1,4 +1,3 @@
-
 from html.parser import HTMLParser
 from typing import Optional
 
@@ -31,7 +30,6 @@ class Element(Node):
 
     def __str__(self):
         return f"<{self.tag} {self.attrs}>"
-    
 
 
 def lex(body: str) -> Element:
@@ -93,3 +91,10 @@ def lex(body: str) -> Element:
     if not parser.root:
         raise Exception("Did not get a root node")
     return parser.root
+
+
+def tree_to_list(node: Node, list: list[Node]) -> list[Node]:
+    list.append(node)
+    for child in node.children:
+        tree_to_list(child, list)
+    return list

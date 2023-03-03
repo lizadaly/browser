@@ -4,11 +4,15 @@ import socket
 import tkinter
 import tkinter.font
 from typing import Any, Literal, Self
+from urllib import parse
 from urllib.parse import urlparse
 import ssl
 
-from css import CSSParser, style
-from htmlparser import Element, Node, Text, lex
+from css import CSSParser, cascade_priority, style
+from htmlparser import Element, Node, Text, lex, tree_to_list
+
+
+logging.basicConfig()
 
 
 def request(url: str) -> tuple[(dict, str)]:
@@ -34,7 +38,6 @@ def request(url: str) -> tuple[(dict, str)]:
     response = s.makefile("r", encoding="utf8", newline="\r\n")
     statusline = response.readline()
     version, status, explanation = statusline.split(" ", 2)
-    assert status == "200", f"{status}: {explanation}"
     headers = {}
     while True:
         line = response.readline()
@@ -42,6 +45,10 @@ def request(url: str) -> tuple[(dict, str)]:
             break
         header, value = line.split(":", 1)
         headers[header.lower()] = value.strip()
+    if status.startswith("30"):
+        request(headers["location"])
+    logging.info(headers)
+    assert status == "200", f"{status}: {explanation}"
     assert "transfer-encoding" not in headers
     assert "content-encoding" not in headers
     body = response.read()
@@ -112,7 +119,6 @@ class Browser:
 
         self.default_style_sheet = CSSParser(Path("browser.css").read_text()).parse()
 
-
     def scrolldown(self, e):
         max_y = self.document.height - HEIGHT
         self.scroll = min(self.scroll + self.SCROLL_STEP, max_y)
@@ -123,9 +129,29 @@ class Browser:
         self.draw()
 
     def load(self, url: str):
-        headers, body = request(url)
+        _, body = request(url)
+
         self.root = lex(body)
-        style(self.root, self.default_style_sheet.copy())
+        rules = self.default_style_sheet.copy()
+        links = [
+            el.attrs["href"]
+            for el in tree_to_list(self.root, [])
+            if isinstance(el, Element)
+            and el.tag == "link"
+            and "href" in el.attrs
+            and el.attrs.get("rel") == "stylesheet"
+        ]
+        for link in [l for l in links if l]:
+            parts = parse.urlsplit(link)
+
+            if not parts.scheme:
+                link = parse.urljoin(url, parts.path)
+            try:
+                _, body = request(link)    
+                rules.extend(CSSParser(body).parse())
+            except AssertionError as e:
+                logging.warning(e)
+        style(self.root, sorted(rules, key=cascade_priority))
         self.document = DocumentLayout(self.root)
         self.document.layout()
         self.document.paint(self.display_list)
@@ -139,9 +165,6 @@ class Browser:
             if cmd.bottom < self.scroll:
                 continue
             cmd.execute(self.scroll, self.canvas)
-
-
-
 
 
 def layout_mode(node: Node) -> Literal["block", "inline"]:
@@ -353,7 +376,6 @@ class DrawRect:
             width=0,
             fill=self.color,
         )
-
 
 
 if __name__ == "__main__":

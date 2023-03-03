@@ -6,43 +6,54 @@ from htmlparser import Element, Node
 logging.basicConfig()
 logger = logging.getLogger(__name__)
 
+
 class Selector(ABC):
+    priority: int
     @abstractmethod
     def matches(self, node: Node) -> bool:
         pass
 
-SelectorType = TypeVar('SelectorType', bound=Selector)
+
+SelectorType = TypeVar("SelectorType", bound=Selector)
+
 
 class TagSelector(Selector):
     def __init__(self, tag: str):
-        self.tag = tag 
-
+        self.tag = tag
+        self.priority = 1
 
     def matches(self, node: Node) -> bool:
         return isinstance(node, Element) and self.tag == node.tag
-    
+
+
 class DescendentSelector(Selector):
     def __init__(self, ancestor: SelectorType, descendant: SelectorType):
         self.ancestor = ancestor
-        self.descendent = descendant
+        self.descendant = descendant
+        self.priority = ancestor.priority + descendant.priority 
 
     def matches(self, node: Node) -> bool:
-        if not self.descendent.matches(node):
-            return False 
+        if not self.descendant.matches(node):
+            return False
         while node.parent:
             if self.ancestor.matches(node.parent):
                 return True
-            node = node.parent 
-        return False 
+            node = node.parent
+        return False
+
+
 
 SelectorRule = tuple[TagSelector | DescendentSelector, dict[str, str]]
 
+def cascade_priority(rule: SelectorRule) -> int:
+    selector, _ = rule 
+    return selector.priority
 
 class CSSParser:
     def __init__(self, s: str):
         self.s: str = s
         self.i: int = 0
-    
+
     def whitespace(self) -> None:
         while self.i < len(self.s) and self.s[self.i].isspace():
             self.i += 1
@@ -86,8 +97,7 @@ class CSSParser:
                 self.whitespace()
                 self.literal(";")
                 self.whitespace()
-            except AssertionError as e:
-                logger.warning(e)
+            except AssertionError:
                 why = self.ignore_until(";}")
                 if why == ";":
                     self.literal(";")
@@ -96,17 +106,16 @@ class CSSParser:
                     break
         return pairs
 
-
     def selector(self):
         out = TagSelector(self.word().lower())
         self.whitespace()
-        while self.i < len(self.s) and self.s[self.i] != '{':
+        while self.i < len(self.s) and self.s[self.i] != "{":
             tag = self.word()
             descendent = TagSelector(tag.lower())
             out = DescendentSelector(out, descendent)
             self.whitespace()
-        return out 
-    
+        return out
+
     def parse(self) -> list[SelectorRule]:
         rules: list[SelectorRule] = []
         while self.i < len(self.s):
@@ -119,15 +128,14 @@ class CSSParser:
                 self.literal("}")
                 rules.append((selector, body))
             except AssertionError:
-                why = self.ignore_until("}")    
+                why = self.ignore_until("}")
                 if why == "}":
                     self.literal("}")
                     self.whitespace()
-                else: 
+                else:
                     break
         return rules
 
-    
 
 def style(node: Element, rules: list[SelectorRule]):
     for selector, body in rules:
@@ -144,4 +152,3 @@ def style(node: Element, rules: list[SelectorRule]):
     for child in node.children:
         if isinstance(child, Element):
             style(child, rules)
-
