@@ -46,7 +46,7 @@ def request(url: str) -> tuple[(dict, str)]:
         header, value = line.split(":", 1)
         headers[header.lower()] = value.strip()
     if status.startswith("30"):
-        request(headers["location"])
+        return request(headers["location"])
     logging.info(headers)
     assert status == "200", f"{status}: {explanation}"
     assert "transfer-encoding" not in headers
@@ -112,7 +112,7 @@ class Browser:
         self.width = width
         self.height = height
         self.window = tkinter.Tk()
-        self.canvas = tkinter.Canvas(self.window, width=self.width, height=self.height)
+        self.canvas = tkinter.Canvas(self.window, width=self.width, height=self.height, bg="white")
         self.canvas.pack()
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
@@ -241,7 +241,7 @@ class BlockLayout:
         self.style = "roman"
         self.size = 16
         self.family = "Georgia"
-        self.line: list[tuple[float, str, tkinter.font.Font]] = []
+        self.line: list[tuple[float, str, tkinter.font.Font, str]] = []
 
     def paint(self, display_list: list["DrawText | DrawRect"]):
         bgcolor = self.node.style.get("background-color", "transparent")
@@ -284,41 +284,17 @@ class BlockLayout:
     def recurse(self, tree: Node):
         if isinstance(tree, Text):
             self.text(tree)
-
         elif isinstance(tree, Element):
-            self.open_tag(tree.tag)
+            if tree.tag == "br":
+                self.flush()
             for child in tree.children:
                 self.recurse(child)
-            self.close_tag(tree.tag)
 
-    def open_tag(self, tag: str):
-        if tag in ("b", "strong"):
-            self.weight = "bold"
-        elif tag in ("i", "em"):
-            self.style = "italic"
-        elif tag in ("h1", "h2", "h3", "h4"):
-            self.size = self.sizes[tag]
-            self.weight = "bold"
-        elif tag in ("div", "p", "nav"):
-            self.flush()
-
-    def close_tag(self, tag: str):
-        if tag in ("b", "strong"):
-            self.weight = "normal"
-        elif tag in ("i", "em"):
-            self.style = "roman"
-        elif tag in ("h1", "h2", "h3", "h4"):
-            self.size = 16
-            self.weight = "normal"
-        elif tag == "br":
-            self.flush()
-        elif tag in ("div", "p", "nav"):
-            self.flush()
-            self.cursor_y += VSTEP
 
     def text(self, tok: Text):
         weight = tok.parent.style["font-weight"]
         style = tok.parent.style["font-style"]
+        color = tok.parent.style["color"]
 
         # Normalize some junk for TK
         if style == "normal": 
@@ -329,7 +305,7 @@ class BlockLayout:
         font = get_font(size=size, weight=weight, style=style, family=self.family)
 
         for word in tok.text.split():
-            self.line.append((self.cursor_x, word, font))
+            self.line.append((self.cursor_x, word, font, color))
             w = font.measure(word)
             self.cursor_x += w + font.measure(" ")
             if self.cursor_x + w > self.width:
@@ -338,13 +314,13 @@ class BlockLayout:
     def flush(self) -> None:
         if not self.line:
             return
-        metrics = [font.metrics() for x, word, font in self.line]
+        metrics = [font.metrics() for _, _, font, _ in self.line]
         max_ascent = max([metric["ascent"] for metric in metrics])
         baseline = self.cursor_y + 1.25 * max_ascent
-        for rel_x, word, font in self.line:
+        for rel_x, word, font, color in self.line:
             x = rel_x + self.x
             y = self.y + baseline - font.metrics("ascent")
-            self.display_list.append(DrawText(x, y, word, font))
+            self.display_list.append(DrawText(x, y, word, font, color))
         self.cursor_x = 0
         self.line = []
         max_descent = max([metric["descent"] for metric in metrics])
@@ -352,11 +328,12 @@ class BlockLayout:
 
 
 class DrawText:
-    def __init__(self, x1: float, y1: float, text: str, font: tkinter.font.Font):
+    def __init__(self, x1: float, y1: float, text: str, font: tkinter.font.Font, color: str):
         self.top = y1
         self.left = x1
         self.text = text
         self.font = font
+        self.color = color
         self.bottom = y1 + font.metrics("linespace")
 
     def execute(self, scroll: float, canvas: tkinter.Canvas):
@@ -366,6 +343,7 @@ class DrawText:
             text=self.text,
             font=self.font,
             anchor="nw",
+            fill=self.color
         )
 
 
