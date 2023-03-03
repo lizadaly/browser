@@ -2,10 +2,12 @@ import logging
 import socket
 import tkinter
 import tkinter.font
-from typing import Any, Literal, Optional, Self
+from typing import Any, Literal, Self
 from urllib.parse import urlparse
-from html.parser import HTMLParser
 import ssl
+
+from css import CSSParser, style
+from htmlparser import Element, Node, Text, lex
 
 
 def request(url: str) -> tuple[(dict, str)]:
@@ -107,6 +109,10 @@ class Browser:
         self.window.bind("<Down>", self.scrolldown)
         self.window.bind("<Up>", self.scrollup)
 
+        with open('browser.css') as f:
+            self.default_style_sheet = CSSParser(f.read()).parse()
+
+
     def scrolldown(self, e):
         max_y = self.document.height - HEIGHT
         self.scroll = min(self.scroll + self.SCROLL_STEP, max_y)
@@ -118,8 +124,9 @@ class Browser:
 
     def load(self, url: str):
         headers, body = request(url)
-        self.nodes = lex(body)
-        self.document = DocumentLayout(self.nodes)
+        self.root = lex(body)
+        style(self.root, self.default_style_sheet.copy())
+        self.document = DocumentLayout(self.root)
         self.document.layout()
         self.document.paint(self.display_list)
         self.draw()
@@ -134,44 +141,7 @@ class Browser:
             cmd.execute(self.scroll, self.canvas)
 
 
-class Node:
-    def __init__(self, parent: Optional["Node"] | None):
-        self.parent: Node | None = parent
-        self.children: list[Node] = []
-        self.style: dict[str, str] = {}
 
-
-class Text(Node):
-    def __init__(self, text: str, parent: Node):
-        super().__init__(parent)
-        self.text = text
-
-    def __str__(self):
-        return f"[text] {self.text}"
-
-
-class Element(Node):
-    def __init__(
-        self, tag: str, attrs: list[tuple[str, None | str]], parent: Node | None = None
-    ):
-        super().__init__(parent)
-        self.tag = tag
-        self.attrs: dict[str, None | str] = {}
-        for n, v in attrs:
-            self.attrs[n] = v
-
-    def __str__(self):
-        return f"<{self.tag} {self.attrs}>"
-
-
-def style(node: Element):
-    if val := node.attrs.get("style"):
-        pairs = CSSParser(val).body()
-        for property, value in pairs.items():
-            node.style[property] = value
-    for child in node.children:
-        if isinstance(child, Element):
-            style(child)
 
 
 def layout_mode(node: Node) -> Literal["block", "inline"]:
@@ -384,126 +354,6 @@ class DrawRect:
             fill=self.color,
         )
 
-
-class CSSParser:
-    def __init__(self, s: str):
-        self.s: str = s
-        self.i: int = 0
-
-    def whitespace(self) -> None:
-        while self.i < len(self.s) and self.s[self.i].isspace():
-            self.i += 1
-
-    def word(self) -> str:
-        start = self.i
-        while self.i < len(self.s):
-            if self.s[self.i].isalnum() or self.s[self.i] in "#-.%":
-                self.i += 1
-            else:
-                break
-        assert self.i > start
-        return self.s[start : self.i]
-
-    def literal(self, literal: str):
-        assert self.i < len(self.s) and self.s[self.i] == literal
-        self.i += 1
-
-    def pair(self) -> tuple[str, str]:
-        prop = self.word()
-        self.whitespace()
-        self.literal(":")
-        self.whitespace()
-        val = self.word()
-        return prop.lower(), val
-
-    def ignore_until(self, chars: str) -> str | None:
-        while self.i < len(self.s):
-            if self.s[self.i] in chars:
-                return self.s[self.i]
-            else:
-                self.i += 1
-        return None
-
-    def body(self) -> dict[str, str]:
-        pairs: dict[str, str] = {}
-        while self.i < len(self.s):
-            try:
-                prop, val = self.pair()
-                pairs[prop.lower()] = val
-                self.whitespace()
-                self.literal(";")
-                self.whitespace()
-            except AssertionError as e:
-                print(e)
-                why = self.ignore_until(";")
-                if why == ";":
-                    self.literal(";")
-                    self.whitespace()
-                else:
-                    break
-        return pairs
-
-
-def lex(body: str) -> Element:
-    class BrowserParser(HTMLParser):
-        root: Element | None
-        open: list[Node]
-        VOID_ELEMENT_TAGS = frozenset(
-            [
-                "area",
-                "base",
-                "br",
-                "col",
-                "embed",
-                "hr",
-                "img",
-                "input",
-                "keygen",
-                "link",
-                "meta",
-                "param",
-                "source",
-                "track",
-                "wbr",
-            ]
-        )
-
-        def __init__(self) -> None:
-            super().__init__()
-            self.open = []
-            self.root = None
-
-        def handle_starttag(self, tag: str, attrs: list[tuple[str, None | str]]):
-            el = Element(tag, attrs)
-            style(el)
-            if not self.root:
-                self.root = el
-            # print(f"<{el.tag}>")
-
-            if self.open:
-                el.parent = self.open[-1]
-                # print(f"{el.parent} -> {el.tag}")
-                el.parent.children.append(el)
-
-            if el.tag not in self.VOID_ELEMENT_TAGS:
-                self.open.append(el)
-
-        def handle_endtag(self, tag: str) -> None:
-            # print(f"</{tag}>")
-            if tag not in self.VOID_ELEMENT_TAGS:
-                self.open.pop()
-
-        def handle_data(self, data: str) -> None:
-            if self.root and self.open:
-                parent = self.open[-1]
-                text = Text(data, parent=parent)
-                parent.children.append(text)
-
-    parser = BrowserParser()
-    parser.feed(body)
-    if not parser.root:
-        raise Exception("Did not get a root node")
-    return parser.root
 
 
 if __name__ == "__main__":
