@@ -19,46 +19,6 @@ HEIGHT = 600
 HSTEP, VSTEP = 13, 18
 FONTS: dict[tuple, tkinter.font.Font] = {}
 
-BLOCK_ELEMENTS = [
-    "html",
-    "body",
-    "article",
-    "section",
-    "nav",
-    "aside",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "hgroup",
-    "header",
-    "footer",
-    "address",
-    "p",
-    "hr",
-    "pre",
-    "blockquote",
-    "ol",
-    "ul",
-    "menu",
-    "li",
-    "dl",
-    "dt",
-    "dd",
-    "figure",
-    "figcaption",
-    "main",
-    "div",
-    "table",
-    "form",
-    "fieldset",
-    "legend",
-    "details",
-    "summary",
-]
-
 
 def request(url: str) -> str:
     req = urllib_request.Request(
@@ -117,9 +77,11 @@ class Browser:
             if not parts.scheme:
                 link = parse.urljoin(url, parts.path)
             try:
-                rules.extend(CSSParser(request(url)).parse())
+                rules.extend(CSSParser(request(link)).parse())
             except AssertionError as e:
                 logging.warning(e)
+
+        # print(rules)
         style(self.root, sorted(rules, key=cascade_priority))
         self.document = DocumentLayout(self.root)
         self.document.layout()
@@ -142,7 +104,7 @@ def layout_mode(node: Node) -> Literal["block", "inline"]:
     elif node.children:
         if any(
             [
-                isinstance(child, Element) and child.tag in BLOCK_ELEMENTS
+                isinstance(child, Element) and child.style.get("display") == "block"
                 for child in node.children
             ]
         ):
@@ -233,7 +195,7 @@ class BlockLayout:
 
         mode = layout_mode(self.node)
 
-        if mode == "block":
+        if mode in ("block", "grid", "flex"):
             previous: BlockLayout | None = None
             for child in self.node.children:
                 next = BlockLayout(child, self, previous)
@@ -307,14 +269,24 @@ class DrawText:
         self.bottom = y1 + font.metrics("linespace")
 
     def execute(self, scroll: float, canvas: tkinter.Canvas):
-        canvas.create_text(
-            self.left,
-            self.top - scroll,
-            text=self.text,
-            font=self.font,
-            anchor="nw",
-            fill=self.color,
-        )
+        try:
+            canvas.create_text(
+                self.left,
+                self.top - scroll,
+                text=self.text,
+                font=self.font,
+                anchor="nw",
+                fill=self.color,
+            )
+        except tkinter.TclError:
+            # Try again with no color
+            canvas.create_text(
+                self.left,
+                self.top - scroll,
+                text=self.text,
+                font=self.font,
+                anchor="nw",
+            )
 
 
 class DrawRect:

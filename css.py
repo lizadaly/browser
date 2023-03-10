@@ -36,7 +36,28 @@ class TagSelector(Selector):
         return isinstance(node, Element) and self.tag == node.tag
 
     def __str__(self):
-        return f"sel: {self.tag}"
+        return f"tag: {self.tag}"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+class ClassSelector(Selector):
+    def __init__(self, klass: str):
+        self.klass = klass[1:]
+        self.priority = 10
+
+    def matches(self, node: Node) -> bool:
+        if isinstance(node, Element):
+            if cls := node.attrs.get("class"):
+                return cls == self.klass
+        return False
+
+    def __str__(self):
+        return f"class: {self.klass}"
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class DescendentSelector(Selector):
@@ -57,8 +78,11 @@ class DescendentSelector(Selector):
     def __str__(self):
         return f"{self.ancestor} {self.descendant}"
 
+    def __repr__(self):
+        return self.__str__()
 
-SelectorRule = tuple[TagSelector | DescendentSelector, dict[str, str]]
+
+SelectorRule = tuple[TagSelector | DescendentSelector | ClassSelector, dict[str, str]]
 
 
 def cascade_priority(rule: SelectorRule) -> int:
@@ -125,7 +149,11 @@ class CSSParser:
         return pairs
 
     def selector(self):
-        out = TagSelector(self.word().lower())
+        sel = self.word().lower()
+        if sel.startswith("."):
+            out = ClassSelector(sel)
+        else:
+            out = TagSelector(sel)
         self.whitespace()
         while self.i < len(self.s) and self.s[self.i] != "{":
             tag = self.word()
@@ -181,7 +209,7 @@ def style(node: Element, rules: list[SelectorRule]):
     for selector, body in rules:
         if not selector.matches(node):
             continue
-
+        # print(f"Matched {selector} with {node}")
         for property, value in body.items():
             computed_value = compute_style(node, property, value)
             if not computed_value:
